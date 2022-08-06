@@ -1,14 +1,39 @@
 import requests
 import re
 import json
-import datetime
+from datetime import date, datetime
 import time
+import math
 import os
 import random
 from notify.tgpush import post_tg
 from notify.Dingpush import dingpush
 
-#签到程序模块
+def get_weather(city = "杭州"):
+  url = "http://autodev.openspeech.cn/csp/api/v2.1/weather?openId=aiuicus&clientType=android&sign=android&city=" + city
+  res = requests.get(url).json()
+  
+  weather = res['data']['list'][0]
+  return weather['weather'], math.floor(weather['temp'])
+
+def get_count( start_date = "2022-02-13" ):
+  today = datetime.now()
+  delta = today - datetime.strptime(start_date, "%Y-%m-%d")
+  return delta.days
+
+def get_birthday(birthday = "07-24" ):
+  next = datetime.strptime(str(date.today().year) + "-" + birthday, "%Y-%m-%d")
+  if next < datetime.now():
+    next = next.replace(year=next.year + 1)
+  return (next - today).days
+
+def get_words():
+  words = requests.get("https://api.shadiao.pro/chp")
+  if words.status_code != 200:
+    return get_words()
+  return words.json()['data']['text']
+
+#签到
 class LoginError(Exception):
     """Login Exception"""
     pass
@@ -34,7 +59,7 @@ def take_out_json(content):
 
 def get_date():
     """Get current date"""
-    today = datetime.date.today() 
+    today = date.today() 
     return "%4d%02d%02d" % (today.year, today.month, today.day)
 
 
@@ -306,7 +331,7 @@ class HealthCheckInHelper(ZJULogin):
                 'jhfjsftjhb':'0',
                 'szsqsfybl':'0',
                 'gwszgz':'',
-                'campus': '紫金港校区', # 紫金港校区 玉泉校区 西溪校区 华家池校区 之江校区 海宁校区 舟山校区 宁波校区 工程师学院 杭州国际科创中心 其他 /不在校即为空值
+                'campus': '玉泉校区', # 紫金港校区 玉泉校区 西溪校区 华家池校区 之江校区 海宁校区 舟山校区 宁波校区 工程师学院 杭州国际科创中心 其他 /不在校即为空值
                 # 👇-----2022.5.19日修改-----👇
                 'verifyCode': ''  ,
                 # 👆-----2022.5.19日修改-----👆
@@ -316,7 +341,7 @@ class HealthCheckInHelper(ZJULogin):
             response = self.sess.post('https://healthreport.zju.edu.cn/ncov/wap/default/save', data=data,
                                     headers=self.headers)
             return response.json()
-
+    
     def Push(self,res):
         if res:
             if self.CHAT_ID and self.TG_TOKEN :
@@ -324,7 +349,9 @@ class HealthCheckInHelper(ZJULogin):
             else:
                 print("telegram推送未配置,请自行查看签到结果")
             if self.DD_BOT_TOKEN:
-                ding= dingpush('今日大帅蒋已为你健康打卡并提醒你好好学习，结果如下： ', res['m'],self.reminders,self.DD_BOT_TOKEN,self.DD_BOT_SECRET)
+                wea,tem = get_weather()
+                ding= dingpush('今日大帅蒋已为你健康打卡，结果如下：{}'.format(res['m']), '早安，小07\n今天杭州的天气是:{}\n当前温度:{}\n今天是我们在一起的第{}天\n{}\n\n今天也要好好学习噢！'.format(wea,tem,get_count(),get_words()) ,self.reminders,self.DD_BOT_TOKEN,self.DD_BOT_SECRET)
+                
                 ding.SelectAndPush()
             else:
                 print("钉钉推送未配置，请自行查看签到结果")
